@@ -32,6 +32,17 @@ Husk is designed with privacy as a top priority. All your data stays private and
 
 Your privacy and control over your data are fundamental principles behind Husk.
 
+## 🙏 Support
+
+If you enjoy using Husk or find it helpful, here are a few ways you can support the project:
+
+- ⭐️ **Star this repository** on GitHub to help others discover Husk.
+- 🐞 **Report issues** or suggest features by opening an issue [here](https://github.com/Nathan1258/Husk/issues).
+- 💬 **Join the discussion** or ask questions in the GitHub Discussions or community forums.
+- 📢 **Share Husk** with friends or on social media to spread the word.
+
+If you're needing any support then please [contact me](mailto:husk-app@pm.com).
+
 ## 🙏 Acknowledgements
 
 Special thanks to the maintainers of the following open-source projects that make Husk possible:
