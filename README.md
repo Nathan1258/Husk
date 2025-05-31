@@ -5,6 +5,10 @@
 ![License](https://img.shields.io/github/license/nathan1258/husk)
 ![GitHub stars](https://img.shields.io/github/stars/nathan1258/husk?style=social)
 
+## App Store
+
+[<img src="https://github.com/Nathan1258/Husk/blob/main/assets/app-store.png">](https://apps.apple.com/gb/app/husk/id6746637464)
+
 ## 🚀 Features
 
 - ✨ Fully offline, private, native Ollama client — with optional iCloud sync for chat history
