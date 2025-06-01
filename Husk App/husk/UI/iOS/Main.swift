@@ -662,21 +662,59 @@ struct ConversationRowView: View {
 // MARK: - Message View
 struct MessageView: View {
     let message: ChatMessage
+    @State private var isThinkingExpanded: Bool = false
+    
     
     var body: some View {
         let isUserMessage = message.role == .user
-        let displayedText = message.content.isEmpty && message.isStreaming ? "..." : message.content
+        let currentDisplayPhase = MessageDisplayPhase(rawValue: message.displayPhase) ?? .pending
+        
+        let showThinkingIndicatorActive = currentDisplayPhase == .thinking && message.isStreaming
+        
+        let assistantAnswerText = (currentDisplayPhase == .answering || currentDisplayPhase == .complete) ? message.content : ""
         
         HStack {
             if isUserMessage { Spacer(minLength: 20) }
             
             VStack(alignment: .leading, spacing: 8) {
-                if let fileNames = message.attachmentFileNames, !fileNames.isEmpty, isUserMessage {
+                if isUserMessage, let fileNames = message.attachmentFileNames, !fileNames.isEmpty {
                     ForEach(fileNames, id: \.self) { fileName in
                         attachmentView(fileName: fileName)
                     }
                 }
-                Markdown(displayedText)
+                
+                if isUserMessage {
+                    let userDisplayedText = message.content.isEmpty && message.isStreaming ? "..." : message.content
+                    if !userDisplayedText.isEmpty {
+                        Markdown(userDisplayedText)
+                    }
+                } else {
+                    if showThinkingIndicatorActive {
+                        ThinkingShimmerView()
+                    }
+                    
+                    if currentDisplayPhase == .complete, let thinkingText = message.thinkingSteps, !thinkingText.isEmpty {
+                        DisclosureGroup(isExpanded: $isThinkingExpanded) {
+                            Markdown(thinkingText)
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                                .padding(.top, 4)
+                        } label: {
+                            Text("Show Thinking Process")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, assistantAnswerText.isEmpty && !showThinkingIndicatorActive ? 0 : 8)
+                    }
+                    if !assistantAnswerText.isEmpty {
+                        Markdown(assistantAnswerText)
+                            .id("answer_\(message.id)")
+                    } else if message.isStreaming && !showThinkingIndicatorActive && assistantAnswerText.isEmpty && currentDisplayPhase != .complete {
+                        Text("...")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
             }
             .padding(10)
             .foregroundColor(.white)
@@ -709,6 +747,37 @@ struct MessageView: View {
         .padding(.vertical, 6)
         .background(Color.black.opacity(0.25))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct ThinkingShimmerView: View {
+    @State private var shimmerPosition: CGFloat = -1.5
+
+    var body: some View {
+        Text("Thinking...")
+            .font(.headline)
+            .foregroundColor(.gray)
+            .opacity(0.7)
+            .overlay(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color.white.opacity(0.6), location: 0.4),
+                        .init(color: Color.white.opacity(0.6), location: 0.6),
+                        .init(color: .clear, location: 1.0)
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .scaleEffect(x: 1.5, y: 1.5)
+                .offset(x: shimmerPosition * 200)
+                .mask(Text("Thinking...").font(.headline))
+            )
+            .onAppear {
+                withAnimation(Animation.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    shimmerPosition = 1.5
+                }
+            }
     }
 }
 

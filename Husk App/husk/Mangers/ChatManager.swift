@@ -334,6 +334,7 @@ class ChatManager: ObservableObject {
         currentConversation.modelNameUsed = modelName
         currentConversation.lastActivityDate = Date()
         
+        
         self.isReplying = true
         self.errorMessage = nil
         
@@ -342,6 +343,8 @@ class ChatManager: ObservableObject {
         currentConversation.addMessage(userMessage, modelContext: modelContext)
         
         let assistantMessage = ChatMessage(role: .assistant, content: "", isStreaming: true)
+        assistantMessage.thinkingSteps = nil
+        assistantMessage.displayPhase = MessageDisplayPhase.pending.rawValue
         currentConversation.addMessage(assistantMessage, modelContext: modelContext)
         
         saveContext()
@@ -356,45 +359,101 @@ class ChatManager: ObservableObject {
         let chatRequestData = OKChatRequestData(model: modelName, messages: historyForOllama)
         
         let streamingTask = Task{
-            var accumulatedContentForCurrentResponse = ""
+            var isInsideThinkTag = false
+            var localAccumulatedThinkContent = ""
+            var localAccumulatedAnswerContent = ""
+            var hasProcessedThinkBlock = false
+            
             var unbatchedChunkBuffer = ""
             let batchThreshold = 30
             var lastUpdateTime = Date()
             let minTimeIntervalForUpdate: TimeInterval = 0.2
             
+            assistantMessage.isStreaming = true
+            
             do {
                 let responseStream: AsyncThrowingStream<OKChatResponse, Error> = ollama.chat(data: chatRequestData)
                 
                 for try await streamedResponse in responseStream {
-                    
                     try Task.checkCancellation()
-                    if let contentPiece = streamedResponse.message?.content {
-                        unbatchedChunkBuffer += contentPiece
+                    
+                    guard var currentChunkToProcess = streamedResponse.message?.content, !currentChunkToProcess.isEmpty else {
+                        if streamedResponse.done { break }
+                        continue
+                    }
+                    
+                    if !hasProcessedThinkBlock {
+                        if !isInsideThinkTag {
+                            if let thinkOpenRange = currentChunkToProcess.range(of: "<think>") {
+                                isInsideThinkTag = true
+                                assistantMessage.displayPhase = MessageDisplayPhase.thinking.rawValue
+                                assistantMessage.content = ""
+                                currentChunkToProcess = String(currentChunkToProcess[thinkOpenRange.upperBound...])
+                            }
+                        }
+                        
+                        if isInsideThinkTag {
+                            if let thinkCloseRange = currentChunkToProcess.range(of: "</think>") {
+                                localAccumulatedThinkContent += currentChunkToProcess[..<thinkCloseRange.lowerBound]
+                                isInsideThinkTag = false
+                                hasProcessedThinkBlock = true
+                                assistantMessage.thinkingSteps = localAccumulatedThinkContent
+                                assistantMessage.displayPhase = MessageDisplayPhase.answering.rawValue
+                                currentChunkToProcess = String(currentChunkToProcess[thinkCloseRange.upperBound...])
+                            } else {
+                                localAccumulatedThinkContent += currentChunkToProcess
+                                if assistantMessage.displayPhase != MessageDisplayPhase.thinking.rawValue {
+                                    assistantMessage.displayPhase = MessageDisplayPhase.thinking.rawValue
+                                }
+                                currentChunkToProcess = ""
+                            }
+                        }
+                    }
+                    
+                    if !currentChunkToProcess.isEmpty {
+                        if assistantMessage.displayPhase != MessageDisplayPhase.answering.rawValue {
+                            assistantMessage.displayPhase = MessageDisplayPhase.answering.rawValue
+                        }
+                        
+                        unbatchedChunkBuffer += currentChunkToProcess
                         let now = Date()
+                        
                         if unbatchedChunkBuffer.count >= batchThreshold || now.timeIntervalSince(lastUpdateTime) >= minTimeIntervalForUpdate {
-                            accumulatedContentForCurrentResponse += unbatchedChunkBuffer
-                            assistantMessage.content = accumulatedContentForCurrentResponse
-                            self.currentStreamingMessageContent = accumulatedContentForCurrentResponse
+                            localAccumulatedAnswerContent += unbatchedChunkBuffer
+                            assistantMessage.content = localAccumulatedAnswerContent
+                            self.currentStreamingMessageContent = localAccumulatedAnswerContent
                             unbatchedChunkBuffer = ""
                             lastUpdateTime = now
                         }
                     }
+                    
+                    if streamedResponse.done { break }
+                    
                 }
                 
                 if !unbatchedChunkBuffer.isEmpty {
-                    accumulatedContentForCurrentResponse += unbatchedChunkBuffer
-                    assistantMessage.content = accumulatedContentForCurrentResponse
-                    self.currentStreamingMessageContent = accumulatedContentForCurrentResponse
+                    localAccumulatedAnswerContent += unbatchedChunkBuffer
+                    await MainActor.run {
+                        assistantMessage.content = localAccumulatedAnswerContent
+                        self.currentStreamingMessageContent = localAccumulatedAnswerContent
+                    }
                 }
                 
                 assistantMessage.isStreaming = false
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue
                 
+                if assistantMessage.content.isEmpty && !localAccumulatedAnswerContent.isEmpty {
+                    assistantMessage.content = localAccumulatedAnswerContent
+                }
+                if (assistantMessage.thinkingSteps ?? "").isEmpty && !localAccumulatedThinkContent.isEmpty {
+                    assistantMessage.thinkingSteps = localAccumulatedThinkContent
+                }
                 currentConversation.lastActivityDate = Date()
                 
                 self.isReplying = false
                 self.currentStreamingMessageContent = ""
-                
                 saveContext()
+                
                 if shouldUseLLMForTitles {
                     let messageCountForTitle = (currentConversation.messages ?? [])
                         .filter { Role(rawValue: $0.roleValue) != .system }
@@ -415,12 +474,22 @@ class ChatManager: ObservableObject {
                 
             }catch is CancellationError{
                 print("Streaming task was cancelled by user.")
-                assistantMessage.content += "\n\n*(Response stopped by user)*"
+                assistantMessage.thinkingSteps = localAccumulatedThinkContent.isEmpty ? nil : localAccumulatedThinkContent
+                assistantMessage.content = localAccumulatedAnswerContent + "\n\n*(Response stopped by user)*"
                 assistantMessage.isStreaming = false
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue // Or .cancelled
+                self.isReplying = false
+                self.currentStreamingMessageContent = ""
+                saveContext()
             } catch {
-                assistantMessage.content += "\n\n*(Error during response: \(error.localizedDescription))*"
+                assistantMessage.thinkingSteps = localAccumulatedThinkContent.isEmpty ? nil : localAccumulatedThinkContent
+                assistantMessage.content = localAccumulatedAnswerContent + "\n\n*(Error during response: \(error.localizedDescription))*"
                 assistantMessage.isStreaming = false
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue
                 self.errorMessage = "Ollama request failed: \(error.localizedDescription)"
+                self.isReplying = false
+                self.currentStreamingMessageContent = ""
+                saveContext()
                 throw error
             }
         }
@@ -434,11 +503,16 @@ class ChatManager: ObservableObject {
                     await MainActor.run {
                         currentConversation.lastActivityDate = Date()
                         currentConversation.updateTitleIfNeeded()
+                        if let conv = self.activeConversation, let lastMessage = conv.messages?.last(where: { $0.id == assistantMessage.id }) {
+                            lastMessage.isStreaming = false
+                            if lastMessage.displayPhase != MessageDisplayPhase.complete.rawValue {
+                                lastMessage.displayPhase = MessageDisplayPhase.complete.rawValue
+                            }
+                        }
                         self.isReplying = false
                         self.currentStreamingMessageContent = ""
                         self.currentStreamingTask = nil
                     }
-                    saveContext()
                     print("sendMessage finished, context saved, isReplying: \(self.isReplying)")
                 }
             }
@@ -446,8 +520,27 @@ class ChatManager: ObservableObject {
             try await streamingTask.value
         } catch is CancellationError {
             print("sendMessage awaited task was cancelled.")
+            if assistantMessage.isStreaming {
+                assistantMessage.content += "\n\n*(Operation cancelled)*"
+                assistantMessage.isStreaming = false
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue
+                saveContext()
+            }
+            self.isReplying = false
+            self.currentStreamingMessageContent = ""
+            self.currentStreamingTask = nil
         } catch {
             print("sendMessage awaited task failed with error: \(error)")
+            if assistantMessage.isStreaming {
+                assistantMessage.content += "\n\n*(Operation failed: \(error.localizedDescription))* "
+                assistantMessage.isStreaming = false
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue
+                saveContext()
+            }
+            self.errorMessage = self.errorMessage ?? "Chat request failed: \(error.localizedDescription)"
+            self.isReplying = false
+            self.currentStreamingMessageContent = ""
+            self.currentStreamingTask = nil
             if let chatError = error as? ChatManagerError {
                 throw chatError
             } else {

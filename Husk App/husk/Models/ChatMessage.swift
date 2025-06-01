@@ -21,6 +21,11 @@ final class ChatMessage {
     var timestamp: Date = Date()
 
     var conversation: Conversation?
+    
+    var thinkingSteps: String? = nil
+    var isShowingThinkingIndicator: Bool = false
+    var displayPhase: String = MessageDisplayPhase.pending.rawValue
+    
 
     @Transient var isStreaming: Bool = false
 
