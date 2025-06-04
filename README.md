@@ -21,6 +21,37 @@
 ![Screenshot 1](https://github.com/Nathan1258/Husk/blob/main/assets/Husk%20-%20Generic%20Screenshot%20-%201.png)
 ![Screenshot 2](https://github.com/Nathan1258/Husk/blob/main/assets/Husk%20-%20Generic%20Screenshot%20-%202.png)
 
+## 💸 Pricing & DIY Install
+
+Husk is a **paid app** on the [App Store](#app-store), which helps support me as an independent developer. By purchasing it, you're directly contributing to the ongoing development, maintenance, and improvements of Husk — thank you!
+
+That said, Husk is also **fully open-source**, so if you prefer, you're welcome to compile and install it yourself for free.
+
+### 🛠️ Build It Yourself (Free Option)
+
+If you'd rather not purchase Husk from the App Store, here's how you can install it manually:
+
+1. **Clone the Repository**  
+   ```bash
+   git clone https://github.com/Nathan1258/Husk.git
+   cd Husk
+   ```
+
+2. **Open in Xcode**  
+   Open the `Husk.xcodeproj` file in Xcode.
+
+3. **Set Your Team**  
+   - Go to the **project settings** in Xcode.
+   - Under **Signing & Capabilities**, set your **Apple Developer account** (a free account works for personal builds).
+
+4. **Build & Run**  
+   - Select your **iOS device** as the target.
+   - Hit **Run (⌘R)** to build and install the app on your device.
+
+> ⚠️ You may need to trust your developer certificate on the device under **Settings → General → Device Management** before launching the app.
+
+This option gives you full access to Husk at no cost, and allows you to explore or contribute to the project freely.
+
 ## 🔒 Privacy
 
 Husk is designed with privacy as a top priority. All your data stays private and secure:
