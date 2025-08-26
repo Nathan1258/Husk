@@ -16,6 +16,7 @@ final class ChatMessage {
     var id: UUID = UUID()
     var roleValue: String = ""
     var content: String = ""
+    var tokensPerSecond: Double? = nil
     var attachmentFileNames: [String]?
     var contentForLlm: String = ""
     var timestamp: Date = Date()

@@ -20,7 +20,7 @@ class SpeechToTextManager: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
-    private let preferredLocale = Locale(identifier: "en-US")
+    private let preferredLocale = Locale.current
 
     init() {
         self.speechRecognizer = SFSpeechRecognizer(locale: preferredLocale)

@@ -57,12 +57,12 @@ class ChatManager: ObservableObject {
         var initialBaseURL: URL
         let combinedURLString = UserDefaults.standard.string(forKey: "ollamaURL") ?? "http://localhost"
         let port = UserDefaults.standard.string(forKey: "ollamaPort") ?? "11434"
-        let fullURLString = "\(combinedURLString):\(port)"
+        let fullURLString = "http://\(combinedURLString):\(port)"
         
         if let url = URL(string: fullURLString), url.scheme != nil {
             initialBaseURL = url
         } else {
-            print("Warning: Stored values were invalid. Using default.")
+            print("Warning: Stored values were invalid. Using default. \(fullURLString)")
             initialBaseURL = URL(string: "http://localhost:11434")!
         }
         
@@ -104,6 +104,32 @@ class ChatManager: ObservableObject {
             print("SwiftData: Failed to save context: \(error)")
             self.errorMessage = "Could not save changes: \(error.localizedDescription)"
         }
+    }
+    
+    @MainActor
+    func updateConnectionSettings() {
+        print("ChatManager: Updating connection settings.")
+        let combinedURLString = UserDefaults.standard.string(forKey: "ollamaURL") ?? "http://localhost"
+        let port = UserDefaults.standard.string(forKey: "ollamaPort") ?? "11434"
+        let fullURLString = "https://\(combinedURLString):\(port)"
+        
+        var newBaseURL: URL
+        if let url = URL(string: fullURLString), url.scheme != nil {
+            newBaseURL = url
+        } else {
+            print("Warning: Stored values were invalid. Using default.")
+            newBaseURL = URL(string: "http://localhost:11434")!
+        }
+        
+        self.ollama = OllamaKit(baseURL: newBaseURL)
+        
+        self.reachable = false
+        self.availableModels = []
+        self.isLoading = true
+        
+        reachabilitySubscription?.cancel()
+        cancellables.forEach { $0.cancel() }
+        setupContinuousReachabilityListener()
     }
     
     func createNewConversation(modelName: String? = nil) {
@@ -369,6 +395,8 @@ class ChatManager: ObservableObject {
             var lastUpdateTime = Date()
             let minTimeIntervalForUpdate: TimeInterval = 0.2
             
+            var lastReceivedResponse: OKChatResponse?
+            
             assistantMessage.isStreaming = true
             
             do {
@@ -376,6 +404,8 @@ class ChatManager: ObservableObject {
                 
                 for try await streamedResponse in responseStream {
                     try Task.checkCancellation()
+                    
+                    lastReceivedResponse = streamedResponse
                     
                     guard var currentChunkToProcess = streamedResponse.message?.content, !currentChunkToProcess.isEmpty else {
                         if streamedResponse.done { break }
@@ -427,7 +457,9 @@ class ChatManager: ObservableObject {
                         }
                     }
                     
-                    if streamedResponse.done { break }
+                    if streamedResponse.done {
+                        break
+                    }
                     
                 }
                 
@@ -437,6 +469,15 @@ class ChatManager: ObservableObject {
                         assistantMessage.content = localAccumulatedAnswerContent
                         self.currentStreamingMessageContent = localAccumulatedAnswerContent
                     }
+                }
+                
+                if let final = lastReceivedResponse, let evalCount = final.evalCount, let evalDuration = final.evalDuration, evalDuration > 0 {
+                    let durationInSeconds = Double(evalDuration) / 1_000_000_000.0
+                    let tps = Double(evalCount) / durationInSeconds
+                    assistantMessage.tokensPerSecond = tps
+                    print("Calculated TPS: \(tps)")
+                } else {
+                    print("Could not calculate TPS. Final response did not contain necessary data: \(String(describing: lastReceivedResponse))")
                 }
                 
                 assistantMessage.isStreaming = false
@@ -477,7 +518,7 @@ class ChatManager: ObservableObject {
                 assistantMessage.thinkingSteps = localAccumulatedThinkContent.isEmpty ? nil : localAccumulatedThinkContent
                 assistantMessage.content = localAccumulatedAnswerContent + "\n\n*(Response stopped by user)*"
                 assistantMessage.isStreaming = false
-                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue // Or .cancelled
+                assistantMessage.displayPhase = MessageDisplayPhase.complete.rawValue
                 self.isReplying = false
                 self.currentStreamingMessageContent = ""
                 saveContext()
@@ -493,7 +534,6 @@ class ChatManager: ObservableObject {
                 throw error
             }
         }
-        
         
         self.currentStreamingTask = streamingTask
         

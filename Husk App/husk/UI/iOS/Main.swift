@@ -284,12 +284,17 @@ struct Main: View {
     
     private var modelSelectionMenu: some View {
         Menu {
-            ForEach(chatManager.availableModels, id: \.self) { model in
-                Button(action: { selectedModel = model }) {
-                    Text(model.name)
-                    if selectedModel == model {
-                        Spacer()
-                        Image(systemName: "checkmark").foregroundColor(.accentColor)
+            if chatManager.availableModels.isEmpty {
+                Text("No models downloaded")
+                    .disabled(true)
+            } else {
+                ForEach(chatManager.availableModels, id: \.self) { model in
+                    Button(action: { selectedModel = model }) {
+                        Text(model.name)
+                        if selectedModel == model {
+                            Spacer()
+                            Image(systemName: "checkmark").foregroundColor(.accentColor)
+                        }
                     }
                 }
             }
@@ -557,6 +562,14 @@ struct LeftSidebarView: View {
                                 isPresented = false
                             }
                         )
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                conversationToDelete = conversation
+                                showingDeleteConfirmation = true
+                            } label: {
+                                Label("Delete Chat", systemImage: "trash.fill")
+                            }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 conversationToDelete = conversation
@@ -663,6 +676,7 @@ struct ConversationRowView: View {
 struct MessageView: View {
     let message: ChatMessage
     @State private var isThinkingExpanded: Bool = false
+    @AppStorage("showTokenPerSeconds") private var showTokenPerSeconds: Bool = true
     
     
     var body: some View {
@@ -714,6 +728,12 @@ struct MessageView: View {
                             .font(.caption)
                             .foregroundColor(.gray)
                     }
+                }
+                if !isUserMessage, currentDisplayPhase == .complete, let tps = message.tokensPerSecond, showTokenPerSeconds {
+                    Text(String(format: "%.2f t/s", tps))
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .padding(.top, 4)
                 }
             }
             .padding(10)

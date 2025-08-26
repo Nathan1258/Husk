@@ -10,6 +10,7 @@ import CloudKit
 struct Settings: View {
     
     @AppStorage("isHapticFeedbackOn") private var isHapticFeedbackOn: Bool = true
+    @AppStorage("showTokenPerSeconds") private var showTokenPerSeconds: Bool = true
     @AppStorage("shouldSyncWithiCloud") private var userSettingForiCloudSync: Bool = false
     @AppStorage("useLLMToCreateTitles") private var useLLMToCreateTitles: Bool = false
     
@@ -82,6 +83,14 @@ struct Settings: View {
                             }
                         }.onChange(of: isHapticFeedbackOn){
                             HapticManager.selectionChanged()
+                        }
+                        
+                        Toggle(isOn: $showTokenPerSeconds) {
+                            HStack {
+                                Image(systemName: "clock.fill")
+                                    .foregroundColor(Color.primary)
+                                Text("Show Tokens Per Second (TPS)")
+                            }
                         }
                         
                         Toggle(isOn: $useLLMToCreateTitles) {
@@ -272,6 +281,7 @@ struct ConnectionsView: View {
         .onDisappear(){
             Task{
                 await chatManager.refreshModels()
+                chatManager.updateConnectionSettings()
             }
         }
     }
