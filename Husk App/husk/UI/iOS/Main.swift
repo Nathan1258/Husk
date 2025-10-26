@@ -264,7 +264,7 @@ struct Main: View {
                     showLeftSidebar.toggle()
                 }
             }) {
-                Image(systemName: showLeftSidebar ? "xmark" : "sidebar.left")
+                Image(systemName: showLeftSidebar ? "xmark" : "bubble")
                     .font(.system(size: 18))
                     .frame(width: 22, height: 22, alignment: .center)
             }
@@ -299,9 +299,10 @@ struct Main: View {
                 }
             }
         } label: {
-            VStack(alignment: .center, spacing: 1) {
-                Text("Husk").font(.title2.bold()).foregroundColor(.accent)
-                Text(selectedModel?.name ?? "Select Model").font(.callout).foregroundColor(.primary)
+            HStack(alignment: .center, spacing: 1) {
+                Text(selectedModel?.name ?? "Select Model").font(.title2.bold()).foregroundColor(.accent)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
             .padding(.bottom, 6)
@@ -824,8 +825,6 @@ struct ChatInputBar: View {
         VStack(spacing: 0) {
             attachmentSection
             textInputSection
-            Divider().padding(.top, 4)
-            actionButtonsSection
         }
         .background(backgroundView)
         .overlay(borderOverlay)
@@ -871,24 +870,21 @@ struct ChatInputBar: View {
     }
     
     private var textInputSection: some View {
-        TextField("Ask anything", text: $text, axis: .vertical)
-            .padding(.horizontal, 12)
-            .padding(.top, (attachmentManager.selectedFileName != nil || attachmentManager.errorMessage != nil) ? 6 : 15)
-            .padding(.bottom, 6)
-            .background(Color.clear)
-            .scrollContentBackground(.hidden)
-            .onSubmit { if !isReplying { prepareAndSendMessage() } }
-    }
-    
-    private var actionButtonsSection: some View {
-        HStack(alignment: .center, spacing: 18) {
+        HStack(alignment: .center, spacing: 6){
             attachmentMenu
+            TextField("Ask anything", text: $text, axis: .vertical)
+                .background(Color.clear)
+                .scrollContentBackground(.hidden)
+                .onSubmit { if !isReplying { prepareAndSendMessage() } }
             Spacer()
-            microphoneButton
-            if chatManager.isReplying{
-                stopButton
-            } else {
-                sendButton
+            if text.isEmpty{
+                microphoneButton
+            }else{
+                if chatManager.isReplying{
+                    stopButton
+                } else {
+                    sendButton
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -934,8 +930,8 @@ struct ChatInputBar: View {
                 speechManager.startRecording()
             }
         }) {
-            Image(systemName: speechManager.isRecording ? "stop.fill" : "mic.fill")
-                .font(.system(size: 22, weight: .regular))
+            Image(systemName: speechManager.isRecording ? "stop.fill" : "waveform.circle.fill")
+                .font(.system(size: 32, weight: .semibold))
                 .foregroundStyle(Color.white)
         }
         .disabled(!speechManager.isSpeechRecognitionAvailable)
